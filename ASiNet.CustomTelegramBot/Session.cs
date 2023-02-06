@@ -45,13 +45,6 @@ public class Session : IDisposable
         }
     }
 
-    public void OnCommand(ITelegramBotClient client, Message msg)
-    {
-        lock (_locker)
-        {
-
-        }
-    }
 
     public void OnButtonCallback(ITelegramBotClient client, CallbackQuery callback)
     {
