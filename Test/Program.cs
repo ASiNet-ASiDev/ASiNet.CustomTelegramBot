@@ -2,7 +2,7 @@
 using ASiNet.CustomTelegramBot.Attributes;
 using ASiNet.CustomTelegramBot.Interfaces;
 
-var bot = new CustomTelegramBotClient<MainPage>("5890196774:AAE76zbTOCuWUmKvhmM_mteBfd169acMj_Q");
+var bot = new CustomTelegramBotClient<MainPage>("token");
 
 Console.ReadLine();
 
