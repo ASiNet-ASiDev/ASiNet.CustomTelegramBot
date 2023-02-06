@@ -76,7 +76,7 @@ public class Session : IDisposable
             var page = Navigator.GetPage();
             var type = page.GetType();
             var hashCode = page.GetHashCode();
-            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<ButtonEventAttribute>() is ButtonEventAttribute attr && x.Name == name);
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnButtonCallbackEventAttribute>() is OnButtonCallbackEventAttribute attr && x.Name == name);
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -104,8 +104,8 @@ public class Session : IDisposable
             var page = Navigator.GetPage();
             var type = page.GetType();
             var msgType = MessageTypeConverterTolFags.GetFlags(msg.Type);
-            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<MessageEventAttribute>() is MessageEventAttribute attr 
-            && (attr.AcceptedMessageTypes == MessageTypeFlags.AllTypes || attr.AcceptedMessageTypes.HasFlag(msgType)));
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnMessageEventAttribute>() is OnMessageEventAttribute attr 
+            && (attr.MessageTypesFilter == MessageTypeFlags.AllTypes || attr.MessageTypesFilter.HasFlag(msgType)));
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -134,7 +134,7 @@ public class Session : IDisposable
             if (commandParameters.Length < 1)
                 return null;
             var command = commandParameters[0];
-            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<CommandEventAttribute>() is CommandEventAttribute attr && attr.Command == command);
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnCommandEventAttribute>() is OnCommandEventAttribute attr && attr.Command == command);
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -234,7 +234,7 @@ public class Session : IDisposable
         try
         {
             var page = new UpdateStubPage();
-            SendOrEditTextMessage(client, page, pageResult, InlineKeyboardMarkup.Empty(), trigger);
+            SendOrEditTextMessage(client, page, PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub), InlineKeyboardMarkup.Empty(), trigger);
         }
         catch (Exception)
         {
@@ -243,9 +243,10 @@ public class Session : IDisposable
 
     private void SendOrEditTextMessage(ITelegramBotClient client, IPage page, PageResult pageResult, InlineKeyboardMarkup markup, EventTriggerType trigger)
     {
-        if (pageResult.Options.HasFlag(ResultOptions.EditLastMessage)
-                && _lastMessage.MessageId != -1
-                && trigger == EventTriggerType.ButtonCallback)
+        if (pageResult.Options.HasFlag(ResultOptions.EditLastMessage) 
+            && _lastMessage.MessageId != -1
+            && (trigger == EventTriggerType.ButtonCallback 
+                || pageResult.Options.HasFlag(ResultOptions.UseUpdateStub)))
         {
             _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: markup).Result;
         }
@@ -263,8 +264,8 @@ public class Session : IDisposable
         {
             var type = page.GetType();
             var grid = new Grid();
-            ButtonEventAttribute? attr = null;
-            foreach (var item in type.GetMethods().Where(x => (attr = x.GetCustomAttribute<ButtonEventAttribute>()) is not null))
+            OnButtonCallbackEventAttribute? attr = null;
+            foreach (var item in type.GetMethods().Where(x => (attr = x.GetCustomAttribute<OnButtonCallbackEventAttribute>()) is not null))
 #pragma warning disable CS8602
                 grid.AddItem(attr.Cell, attr.Text, item.Name);
 #pragma warning restore CS8602

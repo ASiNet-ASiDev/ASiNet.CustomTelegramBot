@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace ASiNet.CustomTelegramBot.Attributes;
 [AttributeUsage(AttributeTargets.Method)]
-public class CommandEventAttribute : Attribute
+public class OnCommandEventAttribute : Attribute
 {
-    public CommandEventAttribute(string command)
+    public OnCommandEventAttribute(string command)
     {
         Command = command;
     }

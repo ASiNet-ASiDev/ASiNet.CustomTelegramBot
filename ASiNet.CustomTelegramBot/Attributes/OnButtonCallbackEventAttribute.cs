@@ -2,9 +2,9 @@
 
 namespace ASiNet.CustomTelegramBot.Attributes;
 [AttributeUsage(AttributeTargets.Method)]
-public class ButtonEventAttribute : Attribute
+public class OnButtonCallbackEventAttribute : Attribute
 {
-    public ButtonEventAttribute(string text, int row, int column)
+    public OnButtonCallbackEventAttribute(string text, int row, int column)
     {
         Text = text;
         Cell = new(row, column);

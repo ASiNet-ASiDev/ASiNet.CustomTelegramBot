@@ -5,7 +5,9 @@ VisualStudioVersion = 17.5.33326.253
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASiNet.CustomTelegramBot", "ASiNet.CustomTelegramBot\ASiNet.CustomTelegramBot.csproj", "{EA022BFE-FA39-4535-B534-EAEE011F8755}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{B03829E9-0801-459C-A376-F406E253A7EE}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{42FED288-6CE4-47BF-8D02-66EF9419F1A3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test1", "Test1\Test1.csproj", "{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,13 +19,16 @@ Global
 		{EA022BFE-FA39-4535-B534-EAEE011F8755}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA022BFE-FA39-4535-B534-EAEE011F8755}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA022BFE-FA39-4535-B534-EAEE011F8755}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B03829E9-0801-459C-A376-F406E253A7EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B03829E9-0801-459C-A376-F406E253A7EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B03829E9-0801-459C-A376-F406E253A7EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B03829E9-0801-459C-A376-F406E253A7EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BA2FE8B2-DE3F-44DE-B682-4A0D062D760B} = {42FED288-6CE4-47BF-8D02-66EF9419F1A3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1376A675-2E5C-425A-A6AF-28D098506EF4}
