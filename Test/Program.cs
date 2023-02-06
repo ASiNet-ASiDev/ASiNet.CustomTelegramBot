@@ -5,7 +5,7 @@ using ASiNet.CustomTelegramBot.Interfaces;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-var bot = new CustomTelegramBotClient<MainPage>("5890196774:AAHjU1Kwb2H-NThfIPmzIraoffkamqFN2Rk");
+var bot = new CustomTelegramBotClient<MainPage>("token");
 
 Console.ReadLine();
 

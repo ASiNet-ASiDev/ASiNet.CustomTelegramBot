@@ -7,6 +7,7 @@ using System.Data;
 using System.Reflection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace ASiNet.CustomTelegramBot;
@@ -32,16 +33,27 @@ public class Session : IDisposable
 
     public void Init(ITelegramBotClient client)
     {
-        var msg = client.SendTextMessageAsync(Chat, "Initialize...").Result;
-        _lastMessage = msg;
-        UpdatePage(client, new PageResult(PageResultAction.None));
+        lock (_locker)
+        {
+            SetUpdateStubPage(client, new(PageResultAction.None), EventTriggerType.None);
+            UpdatePage(client, PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub), EventTriggerType.ButtonCallback);
+        }
     }
 
     public void OnMessage(ITelegramBotClient client, Message msg)
     {
         lock (_locker)
         {
-
+            if(msg.Type == MessageType.Text && msg.Text?[0] == '/')
+            {
+                var pageResult = ExecuteCommandEvent(msg.Text);
+                var result = ProcessingPageResult(client, pageResult, EventTriggerType.Command);
+            }
+            else
+            {
+                var pageResult = ExecuteMessageEvent(msg);
+                var result = ProcessingPageResult(client, pageResult, EventTriggerType.Message);
+            }
         }
     }
 
@@ -52,29 +64,8 @@ public class Session : IDisposable
         {
             if (callback.Data is null)
                 return;
-            var result = ExecuteButtonEvent(callback.Data);
-            if (result is null)
-                return;
-            if(result.Options.UseUpdateStub)
-                SetUpdateStubPage(client, result);
-            switch (result.Action)
-            {
-                case PageResultAction.UpdatePage:
-                    UpdatePage(client, result);
-                    return;
-                case PageResultAction.ToNextPage:
-                    if (result.NextPage is not null)
-                        ToNextPage(client, result, result.NextPage);
-                    return;
-                case PageResultAction.ToPreviousPage:
-                    ToPreviousPage(client, result);
-                    return;
-                case PageResultAction.Exit:
-                    if (result.NextPage is not null)
-                        ToNextPage(client, result, result.NextPage);
-                    Dispose();
-                    return;
-            }
+            var pageResult = ExecuteButtonEvent(callback.Data);
+            var result = ProcessingPageResult(client, pageResult, EventTriggerType.ButtonCallback);
         }
     }
 
@@ -84,8 +75,8 @@ public class Session : IDisposable
         {
             var page = Navigator.GetPage();
             var type = page.GetType();
-
-            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<ButtonEventAttribute>() is not null && x.Name == name);
+            var hashCode = page.GetHashCode();
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<ButtonEventAttribute>() is ButtonEventAttribute attr && x.Name == name);
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -106,65 +97,163 @@ public class Session : IDisposable
         }
     }
 
-    private void ToNextPage(ITelegramBotClient client, PageResult pageResult, IPage page)
+    private PageResult? ExecuteMessageEvent(Message msg)
+    {
+        try
+        {
+            var page = Navigator.GetPage();
+            var type = page.GetType();
+            var msgType = MessageTypeConverterTolFags.GetFlags(msg.Type);
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<MessageEventAttribute>() is MessageEventAttribute attr 
+            && (attr.AcceptedMessageTypes == MessageTypeFlags.AllTypes || attr.AcceptedMessageTypes.HasFlag(msgType)));
+
+            if (method is not null
+                && method.ReturnParameter.ParameterType == typeof(PageResult))
+            {
+                var parameters = method.GetParameters();
+                if (parameters.Length == 1 
+                    && parameters[0].ParameterType == typeof(Message))
+                    return method.Invoke(page, new[] { msg }) as PageResult;
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private PageResult? ExecuteCommandEvent(string text)
+    {
+        try
+        {
+            var page = Navigator.GetPage();
+            var type = page.GetType();
+
+            var commandParameters = text.Trim().TrimStart('/').ToLower().Split(' ');
+            if (commandParameters.Length < 1)
+                return null;
+            var command = commandParameters[0];
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<CommandEventAttribute>() is CommandEventAttribute attr && attr.Command == command);
+
+            if (method is not null
+                && method.ReturnParameter.ParameterType == typeof(PageResult))
+            {
+                var parameters = method.GetParameters();
+                if (parameters.Length == 0)
+                    return method.Invoke(page, null) as PageResult;
+                else if (parameters.Length == 1
+                    && parameters[0].ParameterType.IsArray
+                    && parameters[0].ParameterType.GetElementType() == typeof(string))
+                    return method.Invoke(page, commandParameters.Length > 1 ? commandParameters[1..] : Array.Empty<string>()) as PageResult;
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private bool ProcessingPageResult(ITelegramBotClient client, PageResult? result, EventTriggerType trigger)
+    {
+        try
+        {
+            if (result is null)
+                return false;
+            if (result.Options.HasFlag(ResultOptions.UseUpdateStub))
+                SetUpdateStubPage(client, result, trigger);
+            switch (result.Action)
+            {
+                case PageResultAction.UpdatePage:
+                    UpdatePage(client, result, trigger);
+                    break;
+                case PageResultAction.ToNextPage:
+                    if (result.NextPage is not null)
+                        ToNextPage(client, result, result.NextPage, trigger);
+                    break;
+                case PageResultAction.ToPreviousPage:
+                    ToPreviousPage(client, result, trigger);
+                    break;
+                case PageResultAction.Exit:
+                    if (result.NextPage is not null)
+                        ToNextPage(client, result, result.NextPage, trigger);
+                    Dispose();
+                    break;
+            }
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private void ToNextPage(ITelegramBotClient client, PageResult pageResult, IPage page, EventTriggerType trigger)
     {
         try
         {
             Navigator += page;
             var buttons = GenerateButtons(page);
-            if (pageResult.Options.EditLastMessage && _lastMessage.MessageId != -1)
-                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: buttons).Result;
-            else
-                _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: buttons).Result;
+            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
         }
         catch (Exception)
         {
         }
     }
 
-    private void ToPreviousPage(ITelegramBotClient client, PageResult pageResult)
+    private void ToPreviousPage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
     {
         try
         {
             Navigator--;
             var page = Navigator.GetPage();
             var buttons = GenerateButtons(page);
-            if (pageResult.Options.EditLastMessage && _lastMessage.MessageId != -1)
-                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: buttons).Result;
-            else
-                _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: buttons).Result;
+            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
         }
         catch (Exception)
         {
         }
     }
 
-    private void UpdatePage(ITelegramBotClient client, PageResult pageResult)
+    private void UpdatePage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
     {
         try
         {
             var page = Navigator.GetPage();
             var buttons = GenerateButtons(page);
-            if (_lastMessage.MessageId != -1)
-                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: buttons).Result;
+            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
         }
         catch (Exception)
         {
         }
     }
 
-    private void SetUpdateStubPage(ITelegramBotClient client, PageResult pageResult)
+    private void SetUpdateStubPage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
     {
         try
         {
             var page = new UpdateStubPage();
-            if (pageResult.Options.EditLastMessage && _lastMessage.MessageId != -1)
-                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description).Result;
-            else
-                _lastMessage = client.SendTextMessageAsync(Chat, page.Description).Result;
+            SendOrEditTextMessage(client, page, pageResult, InlineKeyboardMarkup.Empty(), trigger);
         }
         catch (Exception)
         {
+        }
+    }
+
+    private void SendOrEditTextMessage(ITelegramBotClient client, IPage page, PageResult pageResult, InlineKeyboardMarkup markup, EventTriggerType trigger)
+    {
+        if (pageResult.Options.HasFlag(ResultOptions.EditLastMessage)
+                && _lastMessage.MessageId != -1
+                && trigger == EventTriggerType.ButtonCallback)
+        {
+            _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: markup).Result;
+        }
+        else
+        {
+            if(_lastMessage.MessageId != -1 && _lastMessage.ReplyMarkup is not null)
+                _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
+            _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: markup).Result;
         }
     }
 
