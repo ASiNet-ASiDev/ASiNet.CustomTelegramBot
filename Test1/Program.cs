@@ -4,7 +4,7 @@ using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
 using Telegram.Bot.Types;
 
-var bot = new CustomTelegramBotClient<BasePage>("token");
+var bot = new CustomTelegramBotClient<BasePage>("5890196774:AAHjU1Kwb2H-NThfIPmzIraoffkamqFN2Rk");
 Console.Read();
 
 class BasePage : IPage

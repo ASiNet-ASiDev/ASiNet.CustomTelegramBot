@@ -1,4 +1,5 @@
 ﻿using ASiNet.CustomTelegramBot.Interfaces;
+using ASiNet.CustomTelegramBot.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,22 +12,23 @@ public class Navigator : IDisposable
     public Navigator(IPage basePage)
     {
         _pages = new();
-        _pages.Push(basePage);
+        var container = new PageContainer(basePage, PageResult.DefaultOptions);
+        _pages.Push(container);
     }
 
-    private Stack<IPage> _pages;
+    private Stack<PageContainer> _pages;
 
-    public IPage GetPage() => _pages.Peek();
+    public PageContainer GetPage() => _pages.Peek();
     
 
-    public IPage? PopPage()
+    public PageContainer? PopPage()
     {
         if(_pages.Count > 1)
             return _pages.Pop();
         return null;
     }
 
-    public void PushPage(IPage page) => _pages.Push(page);
+    public void PushPage(PageContainer page) => _pages.Push(page);
     
     public void Dispose()
     {
@@ -36,7 +38,7 @@ public class Navigator : IDisposable
         }
     }
 
-    public static Navigator operator +(Navigator nav, IPage page)
+    public static Navigator operator +(Navigator nav, PageContainer page)
     {
         nav.PushPage(page);
         return nav;

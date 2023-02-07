@@ -1,9 +1,13 @@
-﻿using ASiNet.CustomTelegramBot.Attributes;
+﻿#define CALC_EXECUTE_TIME
+#define PRINT_EXCEPTIONS
+using ASiNet.CustomTelegramBot.Attributes;
 using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
 using ASiNet.CustomTelegramBot.Pages;
 using ASiNet.CustomTelegramBot.Types;
+using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Reflection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -11,6 +15,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace ASiNet.CustomTelegramBot;
+
 public class Session : IDisposable
 {
     public Session(Chat chat, Navigator nav, Action<Session> removeSession)
@@ -35,8 +40,7 @@ public class Session : IDisposable
     {
         lock (_locker)
         {
-            SetUpdateStubPage(client, new(PageResultAction.None), EventTriggerType.None);
-            UpdatePage(client, PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub), EventTriggerType.ButtonCallback);
+            ProcessingPageResult(client, PageResult.UpdateThisPage(PageResult.DefaultOptions), EventTriggerType.None);
         }
     }
 
@@ -69,43 +73,176 @@ public class Session : IDisposable
         }
     }
 
-    private PageResult? ExecuteButtonEvent(string name)
+    private bool ProcessingPageResult(ITelegramBotClient client, PageResult? result, EventTriggerType trigger)
     {
         try
         {
-            var page = Navigator.GetPage();
+            if (result is null)
+                return false;
+            switch (result.Action)
+            {
+                case PageResultAction.UpdatePage:
+                    UpdatePage(client, result, result, trigger);
+                    break;
+                case PageResultAction.ToNextPage:
+                    // TODO: сделать страницу с ошибкой.
+                    if (result.NextPage is null)
+                        return false;
+                    var container = new PageContainer(result.NextPage, result.Options);
+                    ToNextPage(client, container, result);
+                    break;
+                case PageResultAction.ToPreviousPage:
+                    ToPreviousPage(client, result, result);
+                    break;
+                case PageResultAction.Exit:
+                    if (result.NextPage is null)
+                    {
+                        Dispose();
+                        return true;
+                    }
+                    container = new PageContainer(result.NextPage, result.Options);
+                    ToNextPage(client, container, result);
+                    Dispose();
+                    break;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
+            return false;
+        }
+    }
+
+    private PageResult? ExecuteButtonEvent(string name)
+    {
+        #region debug init
+#if DEBUG && CALC_EXECUTE_TIME
+        var sw = new Stopwatch();
+        var findMethodTime = 0L;
+        var invokeMethodTime = 0L;
+#endif
+        #endregion
+        try
+        {
+            #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Start();
+#endif
+            #endregion
+
+            // TODO: вынести методы поиска в отдельный класс и кешировать часто используемые методы.
+            var page = Navigator.GetPage().Page;
             var type = page.GetType();
-            var hashCode = page.GetHashCode();
             var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnButtonCallbackEventAttribute>() is OnButtonCallbackEventAttribute attr && x.Name == name);
+
+            #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Stop();
+            findMethodTime = sw.ElapsedMilliseconds;
+#endif
+            #endregion
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
             {
                 var parameters = method.GetParameters();
                 if (parameters.Length == 0)
-                    return method.Invoke(page, null) as PageResult;
+                {
+                    #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Restart();
+#endif
+                    #endregion
+
+                    var result = method.Invoke(page, null) as PageResult;
+
+                    #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Stop();
+                    invokeMethodTime = sw.ElapsedMilliseconds;
+#endif
+                    #endregion
+
+                    return result;
+                }
                 else if (parameters.Length == 1
                     && parameters[0].ParameterType.IsArray
                     && parameters[0].ParameterType.GetElementType() == typeof(string))
-                    return method.Invoke(page, Array.Empty<string>()) as PageResult;
+                {
+                    #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Restart();
+#endif
+                    #endregion
+
+                    var result = (PageResult?)method.Invoke(page, Array.Empty<string>());
+
+                    #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Stop();
+                    invokeMethodTime = sw.ElapsedMilliseconds;
+#endif
+                    #endregion
+
+                    return result;
+                }
             }
             return null;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
+
             return null;
         }
+        #region debug result
+#if DEBUG && CALC_EXECUTE_TIME
+        finally
+        {
+            DebugLoger.InfoLog($"chat: {Chat.Id}", $"method: {nameof(ExecuteButtonEvent)}", $"Total Time: {findMethodTime + invokeMethodTime}ms", $"Find Time: {findMethodTime}ms", $"Execute Time: {invokeMethodTime}ms");
+        }
+#endif
+        #endregion
     }
 
     private PageResult? ExecuteMessageEvent(Message msg)
     {
+        #region debug init
+#if DEBUG && CALC_EXECUTE_TIME
+        var sw = new Stopwatch();
+        var findMethodTime = 0L;
+        var invokeMethodTime = 0L;
+#endif
+        #endregion
         try
         {
-            var page = Navigator.GetPage();
+            #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Start();
+#endif
+            #endregion
+            // TODO: вынести методы поиска в отдельный класс и кешировать часто используемые методы.
+            var page = Navigator.GetPage().Page;
             var type = page.GetType();
             var msgType = MessageTypeConverterTolFags.GetFlags(msg.Type);
             var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnMessageEventAttribute>() is OnMessageEventAttribute attr 
-            && (attr.MessageTypesFilter == MessageTypeFlags.AllTypes || attr.MessageTypesFilter.HasFlag(msgType)));
+                && (attr.MessageTypesFilter == MessageTypeFlags.AllTypes || attr.MessageTypesFilter.HasFlag(msgType)));
+
+            #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Stop();
+            findMethodTime = sw.ElapsedMilliseconds;
+#endif
+            #endregion
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -113,28 +250,85 @@ public class Session : IDisposable
                 var parameters = method.GetParameters();
                 if (parameters.Length == 1 
                     && parameters[0].ParameterType == typeof(Message))
-                    return method.Invoke(page, new[] { msg }) as PageResult;
+                {
+                    #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Restart();
+#endif
+                    #endregion
+
+                    var result = (PageResult?)method.Invoke(page, new[] { msg });
+
+                    #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Stop();
+                    invokeMethodTime = sw.ElapsedMilliseconds;
+#endif
+                    #endregion
+
+                    return result;
+                }    
+                     
+
             }
             return null;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
             return null;
         }
+        #region debug result
+#if DEBUG && CALC_EXECUTE_TIME
+        finally
+        {
+            DebugLoger.InfoLog($"chat: {Chat.Id}", $"method: {nameof(ExecuteMessageEvent)}", $"Total Time: {findMethodTime + invokeMethodTime}ms", $"Find Time: {findMethodTime}ms", $"Execute Time: {invokeMethodTime}ms");
+        }
+#endif
+        #endregion
     }
 
     private PageResult? ExecuteCommandEvent(string text)
     {
+        #region debug init
+#if DEBUG && CALC_EXECUTE_TIME
+        var sw = new Stopwatch();
+        var findMethodTime = 0L;
+        var invokeMethodTime = 0L;
+#endif
+        #endregion
         try
         {
-            var page = Navigator.GetPage();
+            #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Start();
+#endif
+            #endregion
+            // TODO: вынести методы поиска в отдельный класс и кешировать часто используемые методы.
+            var page = Navigator.GetPage().Page;
             var type = page.GetType();
 
             var commandParameters = text.Trim().TrimStart('/').ToLower().Split(' ');
             if (commandParameters.Length < 1)
                 return null;
             var command = commandParameters[0];
+            if(command == "stop")
+            {
+                Dispose();
+                return null;
+            }
             var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnCommandEventAttribute>() is OnCommandEventAttribute attr && attr.Command == command);
+
+            #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+            sw.Stop();
+            findMethodTime = sw.ElapsedMilliseconds;
+#endif
+            #endregion
 
             if (method is not null
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
@@ -145,136 +339,192 @@ public class Session : IDisposable
                 else if (parameters.Length == 1
                     && parameters[0].ParameterType.IsArray
                     && parameters[0].ParameterType.GetElementType() == typeof(string))
-                    return method.Invoke(page, commandParameters.Length > 1 ? commandParameters[1..] : Array.Empty<string>()) as PageResult;
+                {
+                    #region debug start calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Restart();
+#endif
+                    #endregion
+
+                    var result = method.Invoke(page, commandParameters.Length > 1 ? commandParameters[1..] : Array.Empty<string>()) as PageResult;
+
+                    #region debug stop calc time
+#if DEBUG && CALC_EXECUTE_TIME
+                    sw.Stop();
+                    invokeMethodTime = sw.ElapsedMilliseconds;
+#endif
+                    #endregion
+
+                    return result;
+                }   
             }
             return null;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
             return null;
         }
+        #region debug result
+#if DEBUG && CALC_EXECUTE_TIME
+        finally
+        {
+            DebugLoger.InfoLog($"chat: {Chat.Id}", $"method: {nameof(ExecuteCommandEvent)}", $"Total Time: {findMethodTime + invokeMethodTime}ms", $"Find Time: {findMethodTime}ms", $"Execute Time: {invokeMethodTime}ms");
+        }
+#endif
+        #endregion
     }
 
-    private bool ProcessingPageResult(ITelegramBotClient client, PageResult? result, EventTriggerType trigger)
+    private void ToNextPage(ITelegramBotClient client, PageContainer container, PageResult pageResult)
     {
         try
         {
-            if (result is null)
-                return false;
-            if (result.Options.HasFlag(ResultOptions.UseUpdateStub))
-                SetUpdateStubPage(client, result, trigger);
-            switch (result.Action)
+            if(pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
             {
-                case PageResultAction.UpdatePage:
-                    UpdatePage(client, result, trigger);
-                    break;
-                case PageResultAction.ToNextPage:
-                    if (result.NextPage is not null)
-                        ToNextPage(client, result, result.NextPage, trigger);
-                    break;
-                case PageResultAction.ToPreviousPage:
-                    ToPreviousPage(client, result, trigger);
-                    break;
-                case PageResultAction.Exit:
-                    if (result.NextPage is not null)
-                        ToNextPage(client, result, result.NextPage, trigger);
-                    Dispose();
-                    break;
+                SendUpdateStub(client);
+                Navigator += container;
+                UpdateTextMessage(client, container);
             }
-            return true;
+            else
+            {
+                Navigator += container;
+                SendTextMessage(client, container);
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return false;
-        }
-    }
-
-    private void ToNextPage(ITelegramBotClient client, PageResult pageResult, IPage page, EventTriggerType trigger)
-    {
-        try
-        {
-            Navigator += page;
-            var buttons = GenerateButtons(page);
-            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
-        }
-        catch (Exception)
-        {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
         }
     }
 
-    private void ToPreviousPage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
+    private void ToPreviousPage(ITelegramBotClient client, PageResult result, PageResult pageResult)
     {
         try
         {
+            var isUseUpdateStub = pageResult.Options.HasFlag(PageOptions.UseUpdateStub);
+            if (isUseUpdateStub)
+                SendUpdateStub(client);
             Navigator--;
-            var page = Navigator.GetPage();
-            var buttons = GenerateButtons(page);
-            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
+            var container = Navigator.GetPage();
+            container.Options = result.Options;
+            if(isUseUpdateStub)
+                UpdateTextMessage(client, container);
+            else
+                SendTextMessage(client, container);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-        }
-    }
-
-    private void UpdatePage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
-    {
-        try
-        {
-            var page = Navigator.GetPage();
-            var buttons = GenerateButtons(page);
-            SendOrEditTextMessage(client, page, pageResult, buttons, trigger);
-        }
-        catch (Exception)
-        {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
         }
     }
 
-    private void SetUpdateStubPage(ITelegramBotClient client, PageResult pageResult, EventTriggerType trigger)
+    private void UpdatePage(ITelegramBotClient client, PageResult result, PageResult pageResult, EventTriggerType trigger)
     {
         try
         {
+            if(trigger == EventTriggerType.ButtonCallback)
+            {
+                if (pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
+                    SetUpdateStub(client);
+                var container = Navigator.GetPage();
+                container.Options = result.Options;
+                UpdateTextMessage(client, container);
+            }
+            else
+            {
+                if (pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
+                {
+                    SendUpdateStub(client);
+                    var container = Navigator.GetPage();
+                    UpdateTextMessage(client, container);
+                }
+                else
+                {
+                    var container = Navigator.GetPage();
+                    SendTextMessage(client, container);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
+        }
+    }
+
+    private void SetUpdateStub(ITelegramBotClient client)
+    {
+        try
+        {
+            if (_lastMessage.MessageId != -1)
+            {
+                var page = new UpdateStubPage();
+                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
+            }
+            else
+                SendUpdateStub(client);
+        }
+        catch (Exception ex)
+        {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
+        }
+    }
+
+    private void SendUpdateStub(ITelegramBotClient client)
+    {
+        try
+        {
+            if (_lastMessage.ReplyMarkup is not null)
+                _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
             var page = new UpdateStubPage();
-            SendOrEditTextMessage(client, page, PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub), InlineKeyboardMarkup.Empty(), trigger);
+            _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            #region debug print exception
+#if DEBUG && PRINT_EXCEPTIONS
+            DebugLoger.ErrorLog(ex);
+#endif
+            #endregion
         }
     }
 
-    private void SendOrEditTextMessage(ITelegramBotClient client, IPage page, PageResult pageResult, InlineKeyboardMarkup markup, EventTriggerType trigger)
+    private void UpdateTextMessage(ITelegramBotClient client, PageContainer container)
     {
-        if (pageResult.Options.HasFlag(ResultOptions.EditLastMessage) 
-            && _lastMessage.MessageId != -1
-            && (trigger == EventTriggerType.ButtonCallback 
-                || pageResult.Options.HasFlag(ResultOptions.UseUpdateStub)))
+        if (_lastMessage.MessageId != -1)
         {
-            _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: markup).Result;
+            _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, container.Page.Description, replyMarkup: container.Buttons).Result;
         }
         else
         {
-            if(_lastMessage.MessageId != -1 && _lastMessage.ReplyMarkup is not null)
-                _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
-            _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: markup).Result;
+            SendTextMessage(client, container);
         }
     }
 
-    private InlineKeyboardMarkup GenerateButtons(IPage page)
+    private void SendTextMessage(ITelegramBotClient client, PageContainer container)
     {
-        try
-        {
-            var type = page.GetType();
-            var grid = new Grid();
-            OnButtonCallbackEventAttribute? attr = null;
-            foreach (var item in type.GetMethods().Where(x => (attr = x.GetCustomAttribute<OnButtonCallbackEventAttribute>()) is not null))
-#pragma warning disable CS8602
-                grid.AddItem(attr.Cell, attr.Text, item.Name);
-#pragma warning restore CS8602
-            return grid.GetButtons();
-        }
-        catch (Exception)
-        {
-            return new InlineKeyboardMarkup(new InlineKeyboardButton[0][]);
-        }
+        if (_lastMessage.ReplyMarkup is not null)
+            _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
+        _lastMessage = client.SendTextMessageAsync(Chat, container.Page.Description, replyMarkup: container.Buttons).Result;
     }
 
     public void Dispose()
