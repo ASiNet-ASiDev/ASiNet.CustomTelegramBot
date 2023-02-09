@@ -4,14 +4,14 @@ using ASiNet.CustomTelegramBot.Interfaces;
 namespace ASiNet.CustomTelegramBot.Types;
 public class Notification
 {
-    public INotificationPage NotificationPage { get; set; } = null!;
+    public NotificationPage NotificationPage { get; set; } = null!;
     public NotificationTriggerType TriggerType { get; set; }
     public DateTime NotificationExecuteTime { get; set; }
     public bool IsReusable { get; set; }
     public string? Path { get; set; }
     public long ChatId { get; set; }
 
-    public static Notification CreateNotification(INotificationPage notification, DateTime executeTime, bool reusable = true) => new()
+    public static Notification CreateNotification(NotificationPage notification, DateTime executeTime, bool reusable = true) => new()
     {
         NotificationExecuteTime = executeTime,
         TriggerType = NotificationTriggerType.DateTimeTrigger,
@@ -19,7 +19,7 @@ public class Notification
         IsReusable = reusable,
     };
 
-    public static Notification CreateNotification(INotificationPage notification, string path, bool reusable = true) => new()
+    public static Notification CreateNotification(NotificationPage notification, string path, bool reusable = true) => new()
     {
         Path = path,
         TriggerType = NotificationTriggerType.DateTimeTrigger,

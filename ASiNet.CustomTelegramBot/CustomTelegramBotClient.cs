@@ -11,9 +11,10 @@ public class CustomTelegramBotClient : IDisposable
 {
     public CustomTelegramBotClient(string token, Func<Chat, IPage> getBasePage)
     {
+        _getBasePage = getBasePage;
         _source = new();
         _notifications = new();
-        _sessions = new();
+        _privateChatSessions = new();
         _client = new(token);
         _client.StartReceiving(OnUpdate, OnError, cancellationToken: _source.Token);
         _updater = new(OnTimeUpdate, null, TimeSpan.Zero, UpdatePeriod);
@@ -21,9 +22,10 @@ public class CustomTelegramBotClient : IDisposable
 
     public CustomTelegramBotClient(TelegramBotClient client, Func<Chat, IPage> getBasePage)
     {
+        _getBasePage = getBasePage;
         _source = new();
         _notifications = new();
-        _sessions = new();
+        _privateChatSessions = new();
         _client = client;
         _client.StartReceiving(OnUpdate, OnError);
         _updater = new(OnTimeUpdate, null, TimeSpan.Zero, UpdatePeriod);
@@ -34,14 +36,14 @@ public class CustomTelegramBotClient : IDisposable
 
     private TelegramBotClient _client;
     private List<Notification> _notifications;
-    private List<PrivateChatSession> _sessions;
+    private List<PrivateChatSession> _privateChatSessions;
     private CancellationTokenSource _source;
 
     private Timer _updater;
     private readonly object _locker = new();
     private readonly object _notifyLocker = new();
 
-    private Func<Chat, IPage> _getasePage { get; set; }
+    private Func<Chat, IPage> _getBasePage { get; set; }
 
     // TODO: использовать специальной обьект как в токене отмены, в место пути.
     public void SendNotification(string path)
@@ -51,12 +53,12 @@ public class CustomTelegramBotClient : IDisposable
             var deleteNotify = new List<Notification>();
             foreach (var notify in _notifications.Where(x => x.TriggerType == NotificationTriggerType.EventTrigger && x.Path == path))
             {
-                var session = _sessions.FirstOrDefault(x => x.Chat.Id == notify.ChatId);
+                var session = _privateChatSessions.FirstOrDefault(x => x.Chat.Id == notify.ChatId);
                 if (session is null)
                 {
                     session = new(new Chat() { Id = notify.ChatId }, new(notify.NotificationPage), this);
                     lock (this)
-                        _sessions.Add(session);
+                        _privateChatSessions.Add(session);
                 }
                 else
                 {
@@ -104,12 +106,12 @@ public class CustomTelegramBotClient : IDisposable
             var deleteNotify = new List<Notification>();
             foreach (var notify in _notifications.Where(x => x.TriggerType == NotificationTriggerType.DateTimeTrigger && time - x.NotificationExecuteTime.ToUniversalTime() <= UpdatePeriod))
             {
-                var session = _sessions.FirstOrDefault(x => x.Chat.Id == notify.ChatId);
+                var session = _privateChatSessions.FirstOrDefault(x => x.Chat.Id == notify.ChatId);
                 if (session is null)
                 {
                     session = new(new Chat() { Id = notify.ChatId }, new(notify.NotificationPage), this);
                     lock (this)
-                        _sessions.Add(session);
+                        _privateChatSessions.Add(session);
                 }
                 else
                 {
@@ -128,20 +130,20 @@ public class CustomTelegramBotClient : IDisposable
         lock (_locker)
         {
             var thisTime = DateTime.UtcNow;
-            for (int i = 0; i < _sessions.Count; i++)
+            for (int i = 0; i < _privateChatSessions.Count; i++)
             {
-                var session = _sessions[i];
+                var session = _privateChatSessions[i];
                 if (session.IsClosed)
                 {
                     session.Dispose();
-                    _sessions.Remove(session);
+                    _privateChatSessions.Remove(session);
                     continue;
                 }
                 if (thisTime - session.LastActiveTime >= InactiveSessionLifeTime)
                 {
-                    _sessions[i].AddPage(_client, new InactiveSessionPage()).Wait(1000);
+                    _privateChatSessions[i].AddPage(_client, new InactiveSessionPage()).Wait(1000);
                     session.Dispose();
-                    _sessions.Remove(session);
+                    _privateChatSessions.Remove(session);
                     continue;
                 }
             }
@@ -155,16 +157,16 @@ public class CustomTelegramBotClient : IDisposable
             var chat = update.Message?.Chat ?? update.CallbackQuery?.Message?.Chat;
             if (chat is null)
                 return;
-            if (chat.Type != ChatType.Private)
+            if (chat.Type == ChatType.Private)
             {
                 PrivateChatSession? session = null;
 
-                session = _sessions.FirstOrDefault(x => x.Chat.Id == chat.Id);
+                session = _privateChatSessions.FirstOrDefault(x => x.Chat.Id == chat.Id);
                 if (session is null)
                 {
-                    session = new(chat, new(_getasePage?.Invoke(chat) ?? new DefaultBasePage()), this);
+                    session = new(chat, new(_getBasePage?.Invoke(chat) ?? new DefaultBasePage()), this);
                     lock (_locker)
-                        _sessions.Add(session);
+                        _privateChatSessions.Add(session);
                     session.Init(client);
                 }
                 if (session is null)
@@ -203,11 +205,11 @@ public class CustomTelegramBotClient : IDisposable
     {
         _source.Cancel();
         _source.Dispose();
-        while (_sessions.Count > 0)
+        while (_privateChatSessions.Count > 0)
         {
-            var session = _sessions.First();
+            var session = _privateChatSessions.First();
             session.Dispose();
-            _sessions.Remove(session);
+            _privateChatSessions.Remove(session);
         }
     }
 }

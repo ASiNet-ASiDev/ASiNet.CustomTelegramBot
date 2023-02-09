@@ -8,6 +8,8 @@ using Telegram.Bot.Types;
 var bot = new CustomTelegramBotClient("5890196774:AAEfShp7SfvLPRR9dyggNBv0m7j2o4PkD58", (Chat c) => new BasePage());
 Console.Read();
 
+var inp = (NotificationPage)new TestNotify();
+
 class BasePage : ITextPage
 {
     public string Text => $"Clicked Count: {_count}";
@@ -60,10 +62,7 @@ class OnePage : ITextPage
     public void Dispose() { }
 }
 
-class TestNotify : INotificationPage
+class TestNotify : NotificationPage
 {
-    public string Text => $"Test Notify!!";
-    private string _text = string.Empty;
-
-    public void Dispose() { }
+    public override string Text => $"Test Notify!!";
 }

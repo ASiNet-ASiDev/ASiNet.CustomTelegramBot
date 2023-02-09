@@ -4,6 +4,7 @@ using ASiNet.CustomTelegramBot.Attributes;
 using ASiNet.CustomTelegramBot.Debugs;
 using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
+using ASiNet.CustomTelegramBot.Types.Base;
 using System.Diagnostics;
 using System.Reflection;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -64,6 +65,7 @@ public class PageContainer : IDisposable
             #endregion
 
             var type = Page.GetType();
+            var notify = (Page as NotificationPage)?.GetType();
             var grid = new Grid();
             OnButtonCallbackEventAttribute? attr = null;
             foreach (var item in type.GetMethods().Where(x => (attr = x.GetCustomAttribute<OnButtonCallbackEventAttribute>()) is not null))
