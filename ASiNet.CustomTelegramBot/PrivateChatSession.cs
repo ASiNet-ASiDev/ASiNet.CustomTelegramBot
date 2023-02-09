@@ -15,9 +15,9 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace ASiNet.CustomTelegramBot;
 
-public class Session : IDisposable
+public class PrivateChatSession : IDisposable
 {
-    public Session(Chat chat, Navigator nav, CustomTelegramBotClient client)
+    public PrivateChatSession(Chat chat, Navigator nav, CustomTelegramBotClient client)
     {
         Client = client;
         Chat = chat;

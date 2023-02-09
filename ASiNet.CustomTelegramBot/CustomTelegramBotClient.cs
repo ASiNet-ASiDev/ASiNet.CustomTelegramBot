@@ -34,7 +34,7 @@ public class CustomTelegramBotClient : IDisposable
 
     private TelegramBotClient _client;
     private List<Notification> _notifications;
-    private List<Session> _sessions;
+    private List<PrivateChatSession> _sessions;
     private CancellationTokenSource _source;
 
     private Timer _updater;
@@ -156,36 +156,37 @@ public class CustomTelegramBotClient : IDisposable
             if (chat is null)
                 return;
             if (chat.Type != ChatType.Private)
-                return;
-            Session? session = null;
-
-            session = _sessions.FirstOrDefault(x => x.Chat.Id == chat.Id);
-            if (session is null)
             {
-                session = new(chat, new(_getasePage?.Invoke(chat) ?? new DefaultBasePage()), this);
-                lock (_locker)
-                    _sessions.Add(session);
-                session.Init(client);
-            }
-            if (session is null)
-                return;
+                PrivateChatSession? session = null;
 
-            switch (update.Type)
-            {
-                case UpdateType.Message:
-                    if (update.Message is null)
-                        return;
-                    session.OnMessage(client, update.Message);
+                session = _sessions.FirstOrDefault(x => x.Chat.Id == chat.Id);
+                if (session is null)
+                {
+                    session = new(chat, new(_getasePage?.Invoke(chat) ?? new DefaultBasePage()), this);
+                    lock (_locker)
+                        _sessions.Add(session);
+                    session.Init(client);
+                }
+                if (session is null)
                     return;
-                case UpdateType.CallbackQuery:
-                    if (session is null)
+
+                switch (update.Type)
+                {
+                    case UpdateType.Message:
+                        if (update.Message is null)
+                            return;
+                        session.OnMessage(client, update.Message);
                         return;
-                    if (update.CallbackQuery is null)
+                    case UpdateType.CallbackQuery:
+                        if (session is null)
+                            return;
+                        if (update.CallbackQuery is null)
+                            return;
+                        session.OnButtonCallback(client, update.CallbackQuery);
                         return;
-                    session.OnButtonCallback(client, update.CallbackQuery);
-                    return;
-                default:
-                    break;
+                    default:
+                        break;
+                }
             }
         });
     }

@@ -5,7 +5,7 @@ using ASiNet.CustomTelegramBot.Interfaces;
 using ASiNet.CustomTelegramBot.Types;
 using Telegram.Bot.Types;
 
-var bot = new CustomTelegramBotClient<BasePage>("5890196774:AAEfShp7SfvLPRR9dyggNBv0m7j2o4PkD58");
+var bot = new CustomTelegramBotClient("5890196774:AAEfShp7SfvLPRR9dyggNBv0m7j2o4PkD58", (Chat c) => new BasePage());
 Console.Read();
 
 class BasePage : ITextPage
