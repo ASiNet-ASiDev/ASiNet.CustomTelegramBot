@@ -1,6 +1,6 @@
 ﻿using Telegram.Bot.Types.ReplyMarkups;
 
-namespace ASiNet.CustomTelegramBot.Types;
+namespace ASiNet.CustomTelegramBot.Types.Base;
 
 internal class Row
 {

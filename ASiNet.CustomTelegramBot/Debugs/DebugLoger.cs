@@ -1,4 +1,4 @@
-﻿namespace ASiNet.CustomTelegramBot
+﻿namespace ASiNet.CustomTelegramBot.Debugs
 {
 #if DEBUG
     internal static class DebugLoger

@@ -1,6 +1,7 @@
 ﻿#define CALC_EXECUTE_TIME
 #define PRINT_EXCEPTIONS
 using ASiNet.CustomTelegramBot.Attributes;
+using ASiNet.CustomTelegramBot.Debugs;
 using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
 using ASiNet.CustomTelegramBot.Pages;
