@@ -2,14 +2,15 @@
 using ASiNet.CustomTelegramBot.Attributes;
 using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
+using ASiNet.CustomTelegramBot.Types;
 using Telegram.Bot.Types;
 
-var bot = new CustomTelegramBotClient<BasePage>("5890196774:AAHjU1Kwb2H-NThfIPmzIraoffkamqFN2Rk");
+var bot = new CustomTelegramBotClient<BasePage>("5890196774:AAEfShp7SfvLPRR9dyggNBv0m7j2o4PkD58");
 Console.Read();
 
-class BasePage : IPage
+class BasePage : ITextPage
 {
-    public string Description => $"Clicked Count: {_count}";
+    public string Text => $"Clicked Count: {_count}";
     private int _count;
 
     [OnCommandEvent("next")]
@@ -24,12 +25,18 @@ class BasePage : IPage
         _count++;
         return PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub);
     }
+
+    [OnButtonCallbackEvent("Test Notify", 0, 0)]
+    public PageResult AddNotify()
+    {
+        return PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub).AddNotification(Notification.CreateNotification(new TestNotify(), DateTime.UtcNow.AddMinutes(2), false));
+    }
     public void Dispose() { }
 }
 
-class OnePage : IPage
+class OnePage : ITextPage
 {
-    public string Description => $"Entered Text: {_text}";
+    public string Text => $"Entered Text: {_text}";
     private string _text = string.Empty;
 
     [OnCommandEvent("back")]
@@ -50,5 +57,13 @@ class OnePage : IPage
         }
         return PageResult.UpdateThisPage(PageResult.DefaultOptionsNoUseUpdateStub);
     }
+    public void Dispose() { }
+}
+
+class TestNotify : INotificationPage
+{
+    public string Text => $"Test Notify!!";
+    private string _text = string.Empty;
+
     public void Dispose() { }
 }

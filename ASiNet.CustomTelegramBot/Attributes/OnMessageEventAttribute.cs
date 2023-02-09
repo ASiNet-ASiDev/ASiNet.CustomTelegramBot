@@ -1,5 +1,4 @@
 ﻿using ASiNet.CustomTelegramBot.Enums;
-using Telegram.Bot.Types.Enums;
 
 namespace ASiNet.CustomTelegramBot.Attributes;
 [AttributeUsage(AttributeTargets.Method)]

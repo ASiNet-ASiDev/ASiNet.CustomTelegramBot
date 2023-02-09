@@ -1,10 +1,6 @@
 ﻿using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using ASiNet.CustomTelegramBot.Types;
 
 namespace ASiNet.CustomTelegramBot;
 public class PageResult
@@ -19,6 +15,8 @@ public class PageResult
     public PageOptions Options { get; set; }
     public PageResultAction Action { get; set; }
     public IPage? NextPage { get; set; }
+    public List<Notification>? RemoveNotifications { get; set; }
+    public List<Notification>? AddNotifications { get; set; }
 
     public const PageOptions DefaultOptions = PageOptions.UseUpdateStub | PageOptions.ShowInlineKeyboard;
     public const PageOptions DefaultOptionsNoUseUpdateStub = PageOptions.ShowInlineKeyboard;
@@ -28,6 +26,24 @@ public class PageResult
     public static PageResult ToPreviousPage(PageOptions options = DefaultOptions) => new(PageResultAction.ToPreviousPage, options: options);
     public static PageResult UpdateThisPage(PageOptions options = DefaultOptions) => new(PageResultAction.UpdatePage, options: options);
 
-    public static PageResult Exit(PageOptions options = DefaultOptions) => new(PageResultAction.Exit, options: options);
-    public static PageResult ExitAndSendEndPage(IPage page, PageOptions options = DefaultOptions) => new(PageResultAction.Exit, page, options);
+    public static PageResult Exit(PageOptions options = DefaultOptions) => new(PageResultAction.CloseSession, options: options);
+    public static PageResult ExitAndSendEndPage(IPage page, PageOptions options = DefaultOptions) => new(PageResultAction.CloseSession, page, options);
+
+    public PageResult AddNotification(Notification notify)
+    {
+        if (AddNotifications is null)
+            AddNotifications = new();
+        Action |= PageResultAction.AddNotifications;
+        AddNotifications.Add(notify);
+        return this;
+    }
+
+    public PageResult RemoveNotification(Notification notify)
+    {
+        if (RemoveNotifications is null)
+            RemoveNotifications = new();
+        Action |= PageResultAction.RemoveNotifications;
+        RemoveNotifications.Add(notify);
+        return this;
+    }
 }

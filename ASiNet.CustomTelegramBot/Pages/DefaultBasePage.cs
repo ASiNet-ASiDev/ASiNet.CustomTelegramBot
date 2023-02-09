@@ -1,9 +1,9 @@
 ﻿using ASiNet.CustomTelegramBot.Interfaces;
 
 namespace ASiNet.CustomTelegramBot.Pages;
-public class UpdateStubPage : ITextPage
+public class DefaultBasePage : ITextPage
 {
-    public string Text => "Updating...";
+    public string Text => "Default base page!";
 
     public void Dispose()
     {

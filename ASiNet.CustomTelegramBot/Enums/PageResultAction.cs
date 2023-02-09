@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ASiNet.CustomTelegramBot.Enums;
+﻿namespace ASiNet.CustomTelegramBot.Enums;
+[Flags]
 public enum PageResultAction
 {
-    None,
-    UpdatePage,
-    ToNextPage,
-    ToPreviousPage,
-    Exit,
+    None = 0,
+    UpdatePage = 1 << 0,
+    ToNextPage = 1 << 1,
+    ToPreviousPage = 1 << 2,
+    AddNotifications = 1 << 3,
+    RemoveNotifications = 1 << 4,
+    CloseSession = 1 << 5,
 }

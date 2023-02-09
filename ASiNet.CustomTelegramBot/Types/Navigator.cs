@@ -1,12 +1,6 @@
 ﻿using ASiNet.CustomTelegramBot.Interfaces;
-using ASiNet.CustomTelegramBot.Types;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace ASiNet.CustomTelegramBot;
+namespace ASiNet.CustomTelegramBot.Types;
 public class Navigator : IDisposable
 {
     public Navigator(IPage basePage)
@@ -19,17 +13,17 @@ public class Navigator : IDisposable
     private Stack<PageContainer> _pages;
 
     public PageContainer GetPage() => _pages.Peek();
-    
+
 
     public PageContainer? PopPage()
     {
-        if(_pages.Count > 1)
+        if (_pages.Count > 1)
             return _pages.Pop();
         return null;
     }
 
     public void PushPage(PageContainer page) => _pages.Push(page);
-    
+
     public void Dispose()
     {
         while (_pages.Count > 0)

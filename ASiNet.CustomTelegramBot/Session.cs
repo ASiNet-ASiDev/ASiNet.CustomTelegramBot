@@ -5,8 +5,6 @@ using ASiNet.CustomTelegramBot.Enums;
 using ASiNet.CustomTelegramBot.Interfaces;
 using ASiNet.CustomTelegramBot.Pages;
 using ASiNet.CustomTelegramBot.Types;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Reflection;
 using Telegram.Bot;
@@ -18,23 +16,28 @@ namespace ASiNet.CustomTelegramBot;
 
 public class Session : IDisposable
 {
-    public Session(Chat chat, Navigator nav, Action<Session> removeSession)
+    public Session(Chat chat, Navigator nav, CustomTelegramBotClient client)
     {
-        _removeSession = removeSession;
+        Client = client;
         Chat = chat;
         Navigator = nav;
         _lastMessage = new()
-        { 
+        {
             MessageId = -1
         };
+        LastActiveTime = DateTime.UtcNow;
     }
 
     public Chat Chat { get; set; }
     public Navigator Navigator { get; set; }
+    public DateTime LastActiveTime { get; set; }
+
+    internal bool IsClosed { get; private set; }
 
     private readonly object _locker = new();
     private Message _lastMessage;
-    private Action<Session> _removeSession;
+
+    public readonly CustomTelegramBotClient Client;
 
     public void Init(ITelegramBotClient client)
     {
@@ -44,11 +47,23 @@ public class Session : IDisposable
         }
     }
 
+    public async Task AddPage(ITelegramBotClient client, IPage page)
+    {
+        await Task.Run(() =>
+        {
+            lock (_locker)
+            {
+                ProcessingPageResult(client, PageResult.ToNextPage(page, PageResult.DefaultOptions), EventTriggerType.None);
+            }
+        });
+    }
+
     public void OnMessage(ITelegramBotClient client, Message msg)
     {
         lock (_locker)
         {
-            if(msg.Type == MessageType.Text && msg.Text?[0] == '/')
+            LastActiveTime = DateTime.UtcNow;
+            if (msg.Type == MessageType.Text && msg.Text?[0] == '/')
             {
                 var pageResult = ExecuteCommandEvent(msg.Text);
                 var result = ProcessingPageResult(client, pageResult, EventTriggerType.Command);
@@ -66,6 +81,7 @@ public class Session : IDisposable
     {
         lock (_locker)
         {
+            LastActiveTime = DateTime.UtcNow;
             if (callback.Data is null)
                 return;
             var pageResult = ExecuteButtonEvent(callback.Data);
@@ -79,32 +95,42 @@ public class Session : IDisposable
         {
             if (result is null)
                 return false;
-            switch (result.Action)
+            if (result.Action.HasFlag(PageResultAction.UpdatePage))
             {
-                case PageResultAction.UpdatePage:
-                    UpdatePage(client, result, result, trigger);
-                    break;
-                case PageResultAction.ToNextPage:
-                    // TODO: сделать страницу с ошибкой.
-                    if (result.NextPage is null)
-                        return false;
-                    var container = new PageContainer(result.NextPage, result.Options);
-                    ToNextPage(client, container, result);
-                    break;
-                case PageResultAction.ToPreviousPage:
-                    ToPreviousPage(client, result, result);
-                    break;
-                case PageResultAction.Exit:
-                    if (result.NextPage is null)
-                    {
-                        Dispose();
-                        return true;
-                    }
-                    container = new PageContainer(result.NextPage, result.Options);
-                    ToNextPage(client, container, result);
-                    Dispose();
-                    break;
+                UpdatePage(client, result, result, trigger);
             }
+            else if (result.Action.HasFlag(PageResultAction.ToNextPage))
+            {
+                // TODO: сделать страницу с ошибкой.
+                if (result.NextPage is null)
+                    return false;
+                var container = new PageContainer(result.NextPage, result.Options);
+                ToNextPage(client, container, result);
+            }
+            else if (result.Action.HasFlag(PageResultAction.ToPreviousPage))
+            {
+                ToPreviousPage(client, result, result);
+            }
+            else if (result.Action.HasFlag(PageResultAction.CloseSession))
+            {
+                if (result.NextPage is null)
+                {
+                    Dispose();
+                    return true;
+                }
+                var container = new PageContainer(result.NextPage, result.Options);
+                ToNextPage(client, container, result);
+                Dispose();
+            }
+            if (result.Action.HasFlag(PageResultAction.AddNotifications) && result.AddNotifications is not null)
+            {
+                foreach (var item in result.AddNotifications)
+                    item.ChatId = Chat.Id;
+
+                Client.AddNotifications(result.AddNotifications);
+            }
+            if (result.Action.HasFlag(PageResultAction.RemoveNotifications) && result.RemoveNotifications is not null)
+                Client.RemoveNotifications(result.RemoveNotifications);
             return true;
         }
         catch (Exception ex)
@@ -234,7 +260,7 @@ public class Session : IDisposable
             var page = Navigator.GetPage().Page;
             var type = page.GetType();
             var msgType = MessageTypeConverterTolFags.GetFlags(msg.Type);
-            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnMessageEventAttribute>() is OnMessageEventAttribute attr 
+            var method = type.GetMethods().FirstOrDefault(x => x.GetCustomAttribute<OnMessageEventAttribute>() is OnMessageEventAttribute attr
                 && (attr.MessageTypesFilter == MessageTypeFlags.AllTypes || attr.MessageTypesFilter.HasFlag(msgType)));
 
             #region debug stop calc time
@@ -248,7 +274,7 @@ public class Session : IDisposable
                 && method.ReturnParameter.ParameterType == typeof(PageResult))
             {
                 var parameters = method.GetParameters();
-                if (parameters.Length == 1 
+                if (parameters.Length == 1
                     && parameters[0].ParameterType == typeof(Message))
                 {
                     #region debug start calc time
@@ -267,8 +293,8 @@ public class Session : IDisposable
                     #endregion
 
                     return result;
-                }    
-                     
+                }
+
 
             }
             return null;
@@ -316,7 +342,7 @@ public class Session : IDisposable
             if (commandParameters.Length < 1)
                 return null;
             var command = commandParameters[0];
-            if(command == "stop")
+            if (command == "stop")
             {
                 Dispose();
                 return null;
@@ -356,7 +382,7 @@ public class Session : IDisposable
                     #endregion
 
                     return result;
-                }   
+                }
             }
             return null;
         }
@@ -383,7 +409,7 @@ public class Session : IDisposable
     {
         try
         {
-            if(pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
+            if (pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
             {
                 SendUpdateStub(client);
                 Navigator += container;
@@ -415,7 +441,7 @@ public class Session : IDisposable
             Navigator--;
             var container = Navigator.GetPage();
             container.Options = result.Options;
-            if(isUseUpdateStub)
+            if (isUseUpdateStub)
                 UpdateTextMessage(client, container);
             else
                 SendTextMessage(client, container);
@@ -434,7 +460,7 @@ public class Session : IDisposable
     {
         try
         {
-            if(trigger == EventTriggerType.ButtonCallback)
+            if (trigger == EventTriggerType.ButtonCallback)
             {
                 if (pageResult.Options.HasFlag(PageOptions.UseUpdateStub))
                     SetUpdateStub(client);
@@ -474,7 +500,7 @@ public class Session : IDisposable
             if (_lastMessage.MessageId != -1)
             {
                 var page = new UpdateStubPage();
-                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Description, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
+                _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, page.Text, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
             }
             else
                 SendUpdateStub(client);
@@ -496,7 +522,7 @@ public class Session : IDisposable
             if (_lastMessage.ReplyMarkup is not null)
                 _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
             var page = new UpdateStubPage();
-            _lastMessage = client.SendTextMessageAsync(Chat, page.Description, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
+            _lastMessage = client.SendTextMessageAsync(Chat, page.Text, replyMarkup: InlineKeyboardMarkup.Empty()).Result;
         }
         catch (Exception ex)
         {
@@ -512,7 +538,8 @@ public class Session : IDisposable
     {
         if (_lastMessage.MessageId != -1)
         {
-            _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, container.Page.Description, replyMarkup: container.Buttons).Result;
+            var textPage = container.Page as ITextPage;
+            _lastMessage = client.EditMessageTextAsync(Chat, _lastMessage.MessageId, textPage?.Text ?? string.Empty, replyMarkup: container.Buttons).Result;
         }
         else
         {
@@ -522,14 +549,22 @@ public class Session : IDisposable
 
     private void SendTextMessage(ITelegramBotClient client, PageContainer container)
     {
+        var textPage = container.Page as ITextPage;
         if (_lastMessage.ReplyMarkup is not null)
             _lastMessage = client.EditMessageReplyMarkupAsync(Chat, _lastMessage.MessageId, InlineKeyboardMarkup.Empty()).Result;
-        _lastMessage = client.SendTextMessageAsync(Chat, container.Page.Description, replyMarkup: container.Buttons).Result;
+        _lastMessage = client.SendTextMessageAsync(Chat, textPage?.Text ?? string.Empty, replyMarkup: container.Buttons).Result;
     }
 
     public void Dispose()
     {
-        _removeSession?.Invoke(this);
-        Navigator.Dispose();
+        try
+        {
+            IsClosed = true;
+            Navigator.Dispose();
+        }
+        catch (Exception)
+        {
+
+        }
     }
 }
